@@ -1,0 +1,20 @@
+[
+  {
+    "role": "user",
+    "content": "top animes in 2026"
+  },
+  {
+    "role": "assistant",
+    "content": "Please provide a URL to summarize or ask for 'the news'. ",
+    "spoken": true
+  },
+  {
+    "role": "user",
+    "content": "top animes in 2026"
+  },
+  {
+    "role": "assistant",
+    "content": "Please provide a URL to summarize or ask for 'the news'. ",
+    "spoken": false
+  }
+]

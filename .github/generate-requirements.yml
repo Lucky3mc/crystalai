@@ -1,0 +1,33 @@
+name: Generate Requirements
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:  # lets you run it manually
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install pipreqs
+        run: pip install pipreqs
+
+      - name: Generate requirements.txt
+        run: pipreqs . --force
+
+      - name: Commit and Push requirements.txt
+        run: |
+          git config --global user.name "Lucky3mc"
+          git config --global user.email "your_email@example.com"
+          git add requirements.txt
+          git commit -m "Auto-generated requirements.txt"
+          git push

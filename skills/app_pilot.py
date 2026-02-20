@@ -290,3 +290,9 @@ class AppPilotSkill(Skill):
                 print("✅ Selenium closed")
             except:
                 pass
+    def run(self, parameters):
+        if isinstance(parameters, str):
+           user_input = parameters.strip()
+        else:
+           user_input = parameters.get("user_input", "").strip()
+

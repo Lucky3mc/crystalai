@@ -18,3 +18,8 @@ class Skill(ABC):
     def run(self, parameters: dict):
         """Main execution logic."""
         pass
+class Skill:
+    name = ""
+    description = ""
+    icon = ""
+    supported_intents = []

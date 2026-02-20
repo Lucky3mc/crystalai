@@ -1,29 +1,26 @@
 import threading
 import time
-import psutil
-import re
-from typing import Any, Dict, List
+import json
+from typing import Any, Dict
 
 from .memory import Memory
 from .guard import build_prompt, judge, enforce, Judgment
 from .llm import generate_response
-from .intent_judge import detect_intent
+from .intent_judge import IntentJudge
 from skill_manager import SkillManager
 
 
 class CrystalBrain:
     """
-    CrystalBrain: Hardened Cognitive Core
+    CrystalBrain v7.0 — Autonomous Agent Core
 
     Architecture:
-    - Intent Judge decides WHICH skill
-    - Skill decides WHAT action
-    - LLM is fallback only
+    - Manual Skill Lock Mode
+    - Semantic Intent Routing
+    - Autonomous Multi-Step Agent Loop
+    - Deterministic Skill Execution
+    - Safe LLM Fallback
     """
-
-    # ==================================================
-    # INIT
-    # ==================================================
 
     def __init__(
         self,
@@ -34,14 +31,22 @@ class CrystalBrain:
     ):
         self.memory = Memory()
         self.skill_manager = skill_manager
-        self.commands_path = "core/custom_commands.json"
         self.awareness = awareness or {}
         self.temp_conversation = temp_conversation
         self.temp_skill = temp_skill
 
-        # Build intent → skill mapping
+        # Skill Lock Mode
+        self.active_skill = None
+
+        # Autonomous Agent Settings
+        self.agent_mode = True
+        self.max_agent_steps = 5
+
+        # Intent Engine
+        self.judge = IntentJudge(self.skill_manager)
+
+        # Map intents → skill instances
         self.intent_skill_map = self._build_intent_skill_map()
-        print(f"🌌 [SYSTEM]: Intent-Skill mapping loaded: {self.intent_skill_map}")
 
         # Background monitor
         self.monitor_active = True
@@ -51,245 +56,259 @@ class CrystalBrain:
         )
         self.monitor_thread.start()
 
-        print("🌌 [SYSTEM]: Crystal Brain initialized (NLU v4.0).")
+        print(f"🌌 Crystal Brain v7 Online. {len(self.intent_skill_map)} intents mapped.")
 
     # ==================================================
-    # TRACING
-    # ==================================================
-
-    def _trace(self, direction: str, branch: str, payload: Any):
-        ts = time.strftime("%H:%M:%S")
-        print(f"[{ts}] [BRAIN:{branch}] {direction} -> {payload}", flush=True)
-
-    # ==================================================
-    # BACKGROUND MONITOR
-    # ==================================================
-
-    def _background_monitor(self):
-        while self.monitor_active:
-            try:
-                if psutil.cpu_percent() > 90:
-                    time.sleep(10)
-                    continue
-
-                for skill_info in self.skill_manager.skills:
-                    instance = skill_info.get("instance")
-                    if not instance:
-                        continue
-
-                    for hook in (
-                        "check_queue_loop",
-                        "price_monitor",
-                        "weather_monitor",
-                        "reminder_monitor",
-                    ):
-                        fn = getattr(instance, hook, None)
-                        if callable(fn):
-                            fn()
-
-                time.sleep(5)
-
-            except Exception as e:
-                print(f"⚠️ [MONITOR ERROR]: {e}")
-                time.sleep(10)
-
-    # ==================================================
-    # CUSTOM COMMANDS
-    # ==================================================
-
-    def _check_custom_commands(self, text: str):
-        import os, json
-
-        if not os.path.exists(self.commands_path):
-            return None
-
-        try:
-            with open(self.commands_path, "r", encoding="utf-8") as f:
-                commands = json.load(f)
-
-            trigger = text.lower().strip()
-            if trigger not in commands:
-                return None
-
-            mapped = commands[trigger]
-
-            if isinstance(mapped, str) and mapped.startswith("skill:"):
-                return self.skill_manager.run_skill(trigger)
-
-            return mapped
-
-        except Exception as e:
-            print(f"⚠️ [COMMAND ERROR]: {e}")
-            return None
-
-    # ==================================================
-    # MAIN PIPELINE
+    # MAIN PROCESS PIPELINE
     # ==================================================
 
     def process(self, user_text: str) -> str:
-
         self._trace("RECV", "GUI", user_text)
 
-        # 1️⃣ Entity extraction
-        entities = self._extract_entities(user_text)
-        self.memory.add("user", user_text, meta={"entities": entities})
+        user_text = user_text.strip()
+        lowered = user_text.lower()
 
-        # 2️⃣ Memory recall
-        recall = self.memory.query_entities(user_text)
-        if recall:
-            self._trace("RECV", "MEMORY", recall)
-            self.memory.add("assistant", recall)
-            return recall
+        # ------------------------------------------------
+        # 1️⃣ SKILL LOCK COMMANDS
+        # ------------------------------------------------
 
-        # 3️⃣ Guard
-        gate = build_prompt(user_text)
-        system_prompt = gate["system_prompt"]
+        if lowered.startswith("use ") and "skill" in lowered:
+            skill_name = lowered.replace("use", "").replace("skill", "").strip()
+            if skill_name in self.intent_skill_map:
+                self.active_skill = skill_name
+                return f"🔒 {skill_name.replace('_', ' ').title()} mode activated."
+            return "Skill not found."
 
-        if self.awareness:
-            system_prompt += "\n" + "\n".join(
-                f"[Aware of {k}: {v}]" for k, v in self.awareness.items()
-            )
+        if lowered in ["exit", "leave skill", "stop mode"]:
+            self.active_skill = None
+            return "🔓 Returned to global mode."
 
-        # 4️⃣ Custom commands
-        custom = self._check_custom_commands(user_text)
-        if custom:
-            self._trace("RECV", "CUSTOM_CMD", custom)
-            self.memory.add("assistant", custom)
-            return custom
+        # ------------------------------------------------
+        # 2️⃣ LOCKED MODE EXECUTION
+        # ------------------------------------------------
 
-        # ==================================================
-        # 5️⃣ INTENT DETECTION
-        # ==================================================
+        if self.active_skill:
+            skill = self.intent_skill_map.get(self.active_skill)
+            if skill:
+                result = skill.run({
+                    "user_input": user_text,
+                    "intent": self.active_skill,
+                    "mode": "locked"
+                })
+                return result
 
-        self._trace("SEND", "INTENT_JUDGE", user_text)
-        intent_result = detect_intent(user_text)
-        self._trace("RECV", "INTENT_JUDGE", intent_result)
+        # ------------------------------------------------
+        # 3️⃣ SEMANTIC INTENT DETECTION
+        # ------------------------------------------------
+
+        intent_result = self.judge.detect_intent(user_text)
 
         action = intent_result.get("action")
-        intent_name = intent_result.get("intent")
+        intent_name = intent_result.get("intent", "").lower()
+        confidence = intent_result.get("confidence", 1.0)
 
-        # --------------------------------------------------
-        # Clarify
-        # --------------------------------------------------
+        # ------------------------------------------------
+        # 4️⃣ AUTONOMOUS AGENT TRIGGER
+        # ------------------------------------------------
 
-        if action == "clarify":
-            candidates = intent_result.get("candidates", [])
-            options = ", ".join(candidates)
-            reply = f"I detected multiple possible commands: {options}. Which one should I run?"
-            self.memory.add("assistant", reply)
-            return reply
+        if self.agent_mode:
+            complex_markers = [" and ", " then ", "after that", "also"]
 
-        # --------------------------------------------------
-        # Confirm
-        # --------------------------------------------------
+            if any(marker in lowered for marker in complex_markers):
+                return self._run_agent(user_text)
 
-        if action == "confirm":
-            reply = f"Did you want me to run the '{intent_name.replace('_', ' ')}' command?"
-            self.memory.add("assistant", reply)
-            return reply
+        # ------------------------------------------------
+        # 5️⃣ LOW CONFIDENCE SUGGESTION
+        # ------------------------------------------------
 
-        # --------------------------------------------------
-        # Execute
-        # --------------------------------------------------
+        if confidence < 0.65 and intent_result.get("candidates"):
+            options = ", ".join(intent_result["candidates"])
+            return f"I am not fully certain. Did you mean: {options}?"
+
+        # ------------------------------------------------
+        # 6️⃣ SINGLE SKILL EXECUTION
+        # ------------------------------------------------
 
         if action == "execute" and intent_name:
+            skill_instance = self.intent_skill_map.get(intent_name)
 
-            skill_name = self._map_intent_to_skill(intent_name)
-            self._trace("INFO", "ROUTER", f"{intent_name} → {skill_name}")
+            if skill_instance:
+                skill_output = skill_instance.run({
+                    "user_input": user_text,
+                    "intent": intent_name,
+                    "mode": "semantic"
+                })
 
-            if skill_name:
-                self._trace("SEND", "SKILL", skill_name)
+                if isinstance(skill_output, str) and len(skill_output) < 500:
+                    return skill_output
 
-                output = self.skill_manager.run_skill(
-                    user_input=user_text,
-                    intent_result=intent_result,
-                    entities=entities
+                return self._synthesize(user_text, skill_output)
+
+        # ------------------------------------------------
+        # 7️⃣ CONFIRM / CLARIFY
+        # ------------------------------------------------
+
+        if action == "confirm":
+            return f"I think you want me to {intent_name.replace('_', ' ')}. Shall I proceed?"
+
+        if action == "clarify":
+            options = ", ".join(intent_result.get("candidates", []))
+            return f"Did you mean: {options}?"
+
+        # ------------------------------------------------
+        # 8️⃣ LLM FALLBACK
+        # ------------------------------------------------
+
+        return self._llm_fallback(user_text)
+
+    # ==================================================
+    # AUTONOMOUS AGENT LOOP
+    # ==================================================
+
+    def _run_agent(self, goal: str) -> str:
+        plan = self._agent_plan(goal)
+
+        if not plan or "steps" not in plan:
+            return "I could not construct a structured task plan."
+
+        results = []
+        steps = plan["steps"][:self.max_agent_steps]
+
+        for i, step in enumerate(steps):
+            skill_name = step.get("skill", "").lower()
+            step_input = step.get("input", "")
+
+            skill = self.intent_skill_map.get(skill_name)
+
+            if not skill:
+                results.append(f"[Step {i+1}] Unknown skill: {skill_name}")
+                continue
+
+            self._trace("SEND", "AGENT", f"{i+1}: {skill_name}")
+
+            output = skill.run({
+                "user_input": step_input,
+                "intent": skill_name,
+                "mode": "agent"
+            })
+
+            results.append(f"[Step {i+1}] {output}")
+
+        return "\n".join(results)
+
+    def _agent_plan(self, goal: str) -> dict:
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "You are a task planner. "
+                    "Break the user request into executable skill steps. "
+                    "Return strict JSON format:\n"
+                    "{ \"steps\": [ {\"skill\": \"intent_name\", \"input\": \"text\"} ] }"
                 )
+            },
+            {"role": "user", "content": goal}
+        ]
 
-                self._trace("RECV", "SKILL", output)
+        raw = generate_response(messages=messages, temperature=0.1)
 
-                if output:
-                    final = output
-                else:
-                    final = "Command executed."
+        try:
+            return json.loads(raw)
+        except:
+            return {}
 
-            else:
-                final = "Intent recognized but no skill is mapped."
+    # ==================================================
+    # SYNTHESIS
+    # ==================================================
 
-        else:
-            # --------------------------------------------------
-            # LLM FALLBACK
-            # --------------------------------------------------
+    def _synthesize(self, user_text: str, skill_output: str) -> str:
+        recall = self.memory.query_entities(user_text) or "No prior context."
+        gate = build_prompt(user_text)
 
-            context = self.memory.context(last_n=6)
+        final_messages = [
+            {"role": "system", "content": gate["system_prompt"]},
+            *self.memory.context(last_n=6),
+            {
+                "role": "user",
+                "content": (
+                    f"CONTEXT: {recall}\n"
+                    f"SKILL DATA: {skill_output}\n"
+                    f"USER: {user_text}\n\n"
+                    "Respond naturally using SKILL DATA as truth."
+                )
+            }
+        ]
 
-            self._trace("SEND", "LLM", user_text)
-
-            final = generate_response(
-                system_prompt=system_prompt,
-                messages=context,
-                temperature=self.temp_conversation,
-            )
-
-            self._trace("RECV", "LLM", final)
-
-        # ==================================================
-        # GUARD ENFORCEMENT
-        # ==================================================
+        final = generate_response(
+            messages=final_messages,
+            temperature=self.temp_conversation,
+        )
 
         if judge(final, gate["rules"]) == Judgment.FAIL:
             final = enforce(final, gate["rules"])
 
-        # ==================================================
-        # MEMORY WRITE
-        # ==================================================
-
-        if final and len(final) < 500:
-            self.memory.add("assistant", final)
-
+        self.memory.add("assistant", final)
         return final
 
     # ==================================================
-    # INTENT → SKILL MAP
+    # LLM FALLBACK
     # ==================================================
 
-    def _build_intent_skill_map(self) -> Dict[str, str]:
-        mapping = {}
+    def _llm_fallback(self, user_text: str) -> str:
+        gate = build_prompt(user_text)
 
+        messages = [
+            {"role": "system", "content": gate["system_prompt"]},
+            *self.memory.context(last_n=6),
+            {"role": "user", "content": user_text}
+        ]
+
+        response = generate_response(
+            messages=messages,
+            temperature=self.temp_conversation,
+        )
+
+        if judge(response, gate["rules"]) == Judgment.FAIL:
+            response = enforce(response, gate["rules"])
+
+        self.memory.add("assistant", response)
+        return response
+
+    # ==================================================
+    # UTILITIES
+    # ==================================================
+
+    def _build_intent_skill_map(self) -> Dict[str, Any]:
+        mapping = {}
         for skill_info in self.skill_manager.skills:
             instance = skill_info.get("instance")
-            if not instance:
-                continue
-
-            intents = getattr(instance, "supported_intents", [])
-
-            for intent in intents:
-                mapping[intent.lower()] = skill_info.get("name")
-
+            if instance:
+                intents = getattr(instance, "supported_intents", [])
+                for intent in intents:
+                    mapping[intent.lower()] = instance
         return mapping
 
-    def _map_intent_to_skill(self, intent_name: str):
-        return self.intent_skill_map.get(intent_name.lower())
+    def _trace(self, direction: str, branch: str, payload: Any):
+        ts = time.strftime("%H:%M:%S")
+        print(f"[{ts}] [BRAIN:{branch}] {direction} -> {payload}")
 
-    # ==================================================
-    # LIGHTWEIGHT ENTITY EXTRACTION
-    # ==================================================
+    def _background_monitor(self):
+        while self.monitor_active:
+            try:
+                for skill_info in self.skill_manager.skills:
+                    instance = skill_info.get("instance")
+                    if instance:
+                        for hook in ["check_queue_loop", "weather_monitor"]:
+                            fn = getattr(instance, hook, None)
+                            if callable(fn):
+                                fn()
+                time.sleep(10)
+            except:
+                time.sleep(10)
+    def stream_process(self, user_text):
+        response = self.process(user_text)
 
-    def _extract_entities(self, text: str) -> List[Dict]:
-        entities: List[Dict] = []
-
-        for u in re.findall(r"(https?://[^\s]+)", text):
-            entities.append({"type": "url", "value": u})
-
-        for m in re.findall(
-            r"(youtube|spotify|netflix|9anime|juice\s*wrld)",
-            text,
-            re.IGNORECASE,
-        ):
-            entities.append({"type": "media", "value": m})
-
-        for w in text.split():
-            if w[:1].isupper() and len(w) > 2:
-                entities.append({"type": "thing", "value": w})
-
-        return entities
+        # Fake token streaming (works even if LLM is not streaming)
+        for word in response.split():
+            yield word + " "
+            time.sleep(0.03)

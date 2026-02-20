@@ -1,48 +1,66 @@
 import newspaper
 from newspaper import Article
 from skill_manager import Skill
+import requests
+from bs4 import BeautifulSoup
 
 class WebResearcher(Skill):
     name = "Web Researcher"
-    description = "Scrapes and summarizes news or documentation from URLs."
-    keywords = ["summarize", "research", "news", "what's happening", "article"]
+    description = "Scrapes and summarizes news or web content from URLs or topics."
+    keywords = ["summarize", "research", "news", "article", "topic"]
     supported_intents = ["researcher_skill"]
-    def run(self, parameters: dict):
-        text = parameters.get("user_input", "").lower()
 
-        # --- 1. RESEARCH A SPECIFIC URL ---
+    # List of free sources for general topic research
+    FREE_SOURCES = [
+        "https://www.bbc.com/news",
+        "https://techcrunch.com",
+        "https://en.wikipedia.org/wiki/Main_Page"
+    ]
+
+    def run(self, parameters: dict):
+        user_input = parameters.get("user_input", "").strip()
+        text = user_input.lower()
+
+        # === 1. RESEARCH A SPECIFIC URL ===
         if "http" in text:
-            # Extract the URL from the text
             url = [word for word in text.split() if "http" in word][0]
             try:
                 article = Article(url)
                 article.download()
                 article.parse()
-                
-                # Perform NLP (Summary & Keywords)
-                article.nlp()
-                
+                article.nlp()  # summary & keywords
+
                 response = f"### 📰 Summary: {article.title}\n"
                 response += f"> {article.summary[:500]}...\n\n"
                 response += f"**Key Points:** {', '.join(article.keywords[:5])}"
                 return response
             except Exception as e:
-                return f"I couldn't reach that site. The galactic firewall might be up. Error: {e}"
+                return f"I couldn't reach that site. Error: {e}"
 
-        # --- 2. GET NEWS BRIEFING ---
-        if "news" in text or "happening" in text:
-            site_url = "https://www.bbc.com/news" # Default source
-            if "tech" in text: site_url = "https://techcrunch.com"
-            
-            paper = newspaper.build(site_url, memoize_articles=False)
-            briefing = [f"Here is your briefing from {site_url}:"]
-            
-            # Get the top 3 headlines
-            for i, article in enumerate(paper.articles[:3]):
-                article.download()
-                article.parse()
-                briefing.append(f"{i+1}. **{article.title}**")
-            
-            return "\n".join(briefing) + "\n\nWould you like me to summarize any of these for you?"
+        # === 2. GENERAL TOPIC RESEARCH ===
+        results = []
+        for site_url in self.FREE_SOURCES:
+            try:
+                paper = newspaper.build(site_url, memoize_articles=False)
+                matched_articles = []
 
-        return "Please provide a URL to summarize or ask for 'the news'."
+                for article in paper.articles[:5]:  # check first 5 articles per source
+                    article.download()
+                    article.parse()
+                    title_text = f"{article.title} {article.text}".lower()
+                    if text in title_text:
+                        matched_articles.append(
+                            f"**{article.title}**\n> {article.text[:300]}..."
+                        )
+
+                if matched_articles:
+                    results.append(f"### Results from {site_url}:\n" + "\n\n".join(matched_articles))
+
+            except Exception as e:
+                results.append(f"Could not access {site_url}. Error: {e}")
+
+        # === 3. FALLBACK ===
+        if not results:
+            return "I couldn't find exact matches. Try providing a specific URL or slightly different topic."
+
+        return "\n\n".join(results)

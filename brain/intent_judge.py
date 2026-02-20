@@ -1,268 +1,148 @@
+import json
+import os
 from flashtext import KeywordProcessor
 from sentence_transformers import SentenceTransformer, util
+import torch
 
-# =========================================================
-# Crystal Intent Judge v4.0 (Skill-Level Routing)
-# Clean, High-Confidence, Production Version
-# =========================================================
 
-MODEL_NAME = "all-MiniLM-L6-v2"
+class IntentJudge:
+    def __init__(self, skill_manager=None, config_path="core/custom_commands.json"):
+        self.MODEL_NAME = "all-MiniLM-L6-v2"
+        self.HIGH_CONFIDENCE = 0.65
+        self.MEDIUM_CONFIDENCE = 0.45
+        self.AMBIGUITY_MARGIN = 0.07
+        self.config_path = config_path
 
-HIGH_CONFIDENCE = 0.70
-MEDIUM_CONFIDENCE = 0.50
-AMBIGUITY_MARGIN = 0.07
+        print(f"🧠 [JUDGE]: Initializing Semantic Engine ({self.MODEL_NAME})...")
+        self.model = SentenceTransformer(self.MODEL_NAME)
 
-model = SentenceTransformer(MODEL_NAME)
+        # Load intents
+        self.intents, self.imperative_verbs = self._load_data()
 
-# ---------------------------------------------------------
-# SKILL-LEVEL INTENTS (Must match supported_intents)
-# ---------------------------------------------------------
+        print(f"⚡ [JUDGE]: Precomputing embeddings for {len(self.intents)} intents...")
+        self.intent_embeddings = {
+            intent: self.model.encode(phrases, convert_to_tensor=True)
+            for intent, phrases in self.intents.items()
+        }
 
-INTENTS = {
+        # Keyword gate
+        self.keyword_processor = KeywordProcessor(case_sensitive=False)
+        self._setup_keyword_gate()
 
-    # 🧭 App Control / Streaming / Browser
-    "app_pilot": [
-        "open application",
-        "launch app",
-        "start program",
-        "open website",
-        "go to website",
-        "watch movie",
-        "watch anime",
-        "stream show",
-        "open youtube",
-        "open browser",
-        "search online",
-        "type text",
-        "navigate to site",
-        "visit website"
-    ],
+    # =========================================================
+    # DATA LOADING
+    # =========================================================
 
-    # 🎵 Music
-    "music_skill": [
-        "play music",
-        "play song",
-        "play audio",
-        "pause music",
-        "resume music",
-        "stop music",
-        "skip song",
-        "next track",
-        "volume up",
-        "volume down"
-    ],
+    def _load_data(self):
+        if os.path.exists(self.config_path):
+            with open(self.config_path, "r") as f:
+                data = json.load(f)
+                verbs = data.pop("imperative_verbs", [])
+                return data, verbs
 
-    # 📷 Camera
-    "camera_skill": [
-        "open camera",
-        "take picture",
-        "take photo",
-        "capture image",
-        "snapshot"
-    ],
+        print("⚠️ [JUDGE]: custom_commands.json not found. Using defaults.")
 
-    # 🌤 Weather
-    "weather_sentinel": [
-        "weather forecast",
-        "current weather",
-        "temperature outside",
-        "weather today"
-    ],
+        default_intents = {
+            "app_pilot": ["open application", "launch app", "open website", "open youtube"],
+            "music_skill": ["play music", "play song", "pause music", "skip track"],
+            "camera_skill": ["open camera", "take picture", "take photo"],
+            "weather_sentinel": ["weather forecast", "current weather", "temperature outside"],
+            "clock": ["what time is it", "current time"],
+            "file_commander": ["move file", "copy file", "delete file", "list files"],
+            "email_skill": ["check email", "open inbox", "send email"],
+            "web_researcher": ["research topic", "summarize article", "find information"],
+            "reminder_skill": ["set reminder", "remind me"],
+            "smart_home": ["turn on light", "turn off device"],
+            "system_sentinel": ["system status", "battery level", "cpu usage"],
+            "wifi_scanner": ["scan wifi", "network scan"],
+            "osint_investigator": ["find person", "background check"],
+            "location_sentinel": ["where am i", "current location"],
+            "greet": ["hello", "hi crystal", "wake up"]
+        }
 
-    # ⏰ Time
-    "clock": [
-        "what time is it",
-        "current time",
-        "tell me the time"
-    ],
+        default_verbs = [
+            "open", "launch", "start", "play",
+            "search", "watch", "move", "delete",
+            "scan", "set", "check"
+        ]
 
-    # 📁 File Manager
-    "file_commander": [
-        "move file",
-        "copy file",
-        "rename file",
-        "delete file",
-        "show files",
-        "list files",
-        "open folder"
-    ],
+        return default_intents, default_verbs
 
-    # 📧 Email
-    "email_skill": [
-        "check email",
-        "open inbox",
-        "send email",
-        "compose email"
-    ],
+    # =========================================================
+    # KEYWORD GATE
+    # =========================================================
 
-    # 🌐 Web Research
-    "web_researcher": [
-        "research topic",
-        "summarize article",
-        "latest news",
-        "find information"
-    ],
+    def _setup_keyword_gate(self):
+        for phrases in self.intents.values():
+            for phrase in phrases:
+                if len(phrase.split()) <= 2:
+                    self.keyword_processor.add_keyword(phrase)
 
-    # 🔔 Reminders
-    "reminder_skill": [
-        "set reminder",
-        "remind me",
-        "create task",
-        "todo"
-    ],
+        for verb in self.imperative_verbs:
+            self.keyword_processor.add_keyword(verb)
 
-    # 🏠 Smart Home
-    "smart_home": [
-        "turn on light",
-        "turn off device",
-        "activate scene",
-        "home automation"
-    ],
+    # =========================================================
+    # INTENT DETECTION
+    # =========================================================
 
-    # 💻 System Monitor
-    "system_sentinel": [
-        "system status",
-        "battery level",
-        "cpu usage",
-        "system health"
-    ],
+    def detect_intent(self, text: str):
+        text = text.lower().strip()
 
-    # 📡 WiFi
-    "wifi_scanner": [
-        "scan wifi",
-        "who is on network",
-        "network scan"
-    ],
+        if not text:
+            return {"action": "none"}
 
-    # 🔍 OSINT
-    "osint_investigator": [
-        "find person",
-        "background check",
-        "investigate profile",
-        "osint search"
-    ],
+        print(f"\n🧠 [JUDGE]: Analyzing → {text}")
 
-    # 📍 Location
-    "location_sentinel": [
-        "where am i",
-        "current location",
-        "my location"
-    ],
+        # 1️⃣ KEYWORD CHECK (Speed Boost, Not Hard Block)
+        keywords = self.keyword_processor.extract_keywords(text)
+        first_word = text.split()[0] if text.split() else ""
 
-    # 👋 Greeting
-    "greet": [
-        "hello",
-        "hi crystal",
-        "wake up"
-    ]
-}
+        print(f"🧠 [JUDGE]: Keywords → {keywords}")
 
-# ---------------------------------------------------------
-# Imperative verbs (command boost)
-# ---------------------------------------------------------
+        # 2️⃣ SEMANTIC EVALUATION
+        text_emb = self.model.encode(text, convert_to_tensor=True)
 
-IMPERATIVE_VERBS = [
-    "open", "launch", "start", "play",
-    "search", "watch", "stream",
-    "type", "move", "delete",
-    "rename", "copy"
-]
+        scores = []
+        for intent, emb in self.intent_embeddings.items():
+            score = util.cos_sim(text_emb, emb).max().item()
+            scores.append((intent, score))
 
-# ---------------------------------------------------------
-# Precompute embeddings
-# ---------------------------------------------------------
+        scores.sort(key=lambda x: x[1], reverse=True)
 
-INTENT_EMBEDDINGS = {
-    intent: model.encode(phrases, convert_to_tensor=True)
-    for intent, phrases in INTENTS.items()
-}
+        top_intent, top_score = scores[0]
+        print(f"🧠 [JUDGE]: Top Intent → {top_intent} ({top_score:.3f})")
 
-# ---------------------------------------------------------
-# FlashText Gate
-# ---------------------------------------------------------
+        # 3️⃣ Ambiguity Detection
+        close_matches = [
+            intent for intent, score in scores[1:]
+            if abs(top_score - score) <= self.AMBIGUITY_MARGIN
+        ]
 
-keyword_processor = KeywordProcessor(case_sensitive=False)
+        if close_matches and top_score >= self.MEDIUM_CONFIDENCE:
+            print("🧠 [JUDGE]: Ambiguous match detected.")
+            return {
+                "action": "clarify",
+                "intent": top_intent,
+                "confidence": round(top_score, 3),
+                "candidates": [top_intent] + close_matches
+            }
 
-for phrases in INTENTS.values():
-    for phrase in phrases:
-        if len(phrase.split()) == 1:
-            keyword_processor.add_keyword(phrase)
+        # 4️⃣ Final Routing
+        if top_score >= self.HIGH_CONFIDENCE:
+            print("🧠 [JUDGE]: High confidence execution.")
+            return {
+                "action": "execute",
+                "intent": top_intent,
+                "confidence": round(top_score, 3)
+            }
 
-for verb in IMPERATIVE_VERBS:
-    keyword_processor.add_keyword(verb)
+        if top_score >= self.MEDIUM_CONFIDENCE:
+            print("🧠 [JUDGE]: Medium confidence — confirmation required.")
+            return {
+                "action": "confirm",
+                "intent": top_intent,
+                "confidence": round(top_score, 3)
+            }
 
-# ---------------------------------------------------------
-# Intent Detection
-# ---------------------------------------------------------
-
-def detect_intent(text: str):
-
-    text = text.lower().strip()
-    if not text:
+        print("🧠 [JUDGE]: No suitable intent.")
         return {"action": "none"}
-
-    # -----------------------
-    # 1️⃣ Keyword / Verb Gate
-    # -----------------------
-
-    keywords = keyword_processor.extract_keywords(text)
-    first_word = text.split()[0]
-
-    if not keywords and first_word not in IMPERATIVE_VERBS:
-        return {"action": "none"}
-
-    # -----------------------
-    # 2️⃣ Embedding Similarity
-    # -----------------------
-
-    text_emb = model.encode(text, convert_to_tensor=True)
-
-    scores = []
-    for intent, emb in INTENT_EMBEDDINGS.items():
-        score = util.cos_sim(text_emb, emb).max().item()
-        scores.append((intent, score))
-
-    scores.sort(key=lambda x: x[1], reverse=True)
-
-    top_intent, top_score = scores[0]
-
-    # -----------------------
-    # 3️⃣ Ambiguity Check
-    # -----------------------
-
-    close_matches = [
-        intent for intent, score in scores[1:]
-        if abs(top_score - score) <= AMBIGUITY_MARGIN
-    ]
-
-    if close_matches and top_score >= MEDIUM_CONFIDENCE:
-        return {
-            "action": "clarify",
-            "intent": top_intent,
-            "confidence": round(top_score, 3),
-            "candidates": [top_intent] + close_matches
-        }
-
-    # -----------------------
-    # 4️⃣ Execute
-    # -----------------------
-
-    if top_score >= HIGH_CONFIDENCE:
-        return {
-            "action": "execute",
-            "intent": top_intent,
-            "confidence": round(top_score, 3)
-        }
-
-    # -----------------------
-    # 5️⃣ Confirm
-    # -----------------------
-
-    if top_score >= MEDIUM_CONFIDENCE:
-        return {
-            "action": "confirm",
-            "intent": top_intent,
-            "confidence": round(top_score, 3)
-        }
-
-    return {"action": "none"}

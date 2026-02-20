@@ -1,0 +1,122 @@
+{
+  "app_pilot": [
+    "open application",
+    "launch app",
+    "start program",
+    "open website",
+    "go to website",
+    "watch movie",
+    "watch anime",
+    "stream show",
+    "open youtube",
+    "open browser",
+    "search online",
+    "type text",
+    "navigate to site",
+    "visit website"
+  ],
+  "music_skill": [
+    "play music",
+    "play song",
+    "play audio",
+    "pause music",
+    "resume music",
+    "stop music",
+    "skip song",
+    "next track",
+    "volume up",
+    "volume down"
+  ],
+  "camera_skill": [
+    "open camera",
+    "take picture",
+    "take photo",
+    "capture image",
+    "snapshot"
+  ],
+  "weather_sentinel": [
+    "weather forecast",
+    "current weather",
+    "temperature outside",
+    "weather today"
+  ],
+  "clock": [
+    "what time is it",
+    "current time",
+    "tell me the time"
+  ],
+  "file_commander": [
+    "move file",
+    "copy file",
+    "rename file",
+    "delete file",
+    "show files",
+    "list files",
+    "open folder"
+  ],
+  "email_skill": [
+    "check email",
+    "open inbox",
+    "send email",
+    "compose email"
+  ],
+  "web_researcher": [
+    "research topic",
+    "summarize article",
+    "latest news",
+    "find information"
+  ],
+  "reminder_skill": [
+    "set reminder",
+    "remind me",
+    "create task",
+    "todo"
+  ],
+  "smart_home": [
+    "turn on light",
+    "turn off device",
+    "activate scene",
+    "home automation"
+  ],
+  "system_sentinel": [
+    "system status",
+    "battery level",
+    "cpu usage",
+    "system health"
+  ],
+  "wifi_scanner": [
+    "scan wifi",
+    "who is on network",
+    "network scan"
+  ],
+  "osint_investigator": [
+    "find person",
+    "background check",
+    "investigate profile",
+    "osint search"
+  ],
+  "location_sentinel": [
+    "where am i",
+    "current location",
+    "my location"
+  ],
+  "greet": [
+    "hello",
+    "hi crystal",
+    "wake up"
+  ],
+  "imperative_verbs": [
+    "open",
+    "launch",
+    "start",
+    "play",
+    "search",
+    "watch",
+    "stream",
+    "type",
+    "move",
+    "delete",
+    "rename",
+    "copy"
+  ]
+}

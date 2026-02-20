@@ -3,5 +3,20 @@
   "emotion": "neutral",
   "intimacy": 0.3,
   "trust": 0.5,
-  "personality": "gentle"
+  "personality": "gentle",
+  "volume": 0.9,
+  "rate": "medium",
+  "pitch": "+2%",
+  "style": "default",
+  "last_spoken_text": "",
+  "last_interaction_time": "2026-02-19T00:00:00Z",
+  "preferred_voices": ["en-US-JennyNeural", "en-US-GuyNeural"],
+  "expressiveness": 0.7,
+  "whisper_threshold": 0.2,
+  "excited_threshold": 0.6,
+  "laugh_threshold": 0.5,
+  "pause_after_comma": "120ms",
+  "pause_after_period": "220ms",
+  "pause_after_ellipsis": "500ms",
+  "pause_after_linebreak": "400ms"
 }
